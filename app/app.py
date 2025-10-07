@@ -11,10 +11,10 @@ pymysql.install_as_MySQLdb()
 app = Flask(__name__)
 
 # ===== 設定 =====
-AWS_REGION     = os.getenv("AWS_REGION", "ap-northeast-1")
+AWS_REGION     = os.getenv("AWS_REGION", "ap-northeast-2")
 DB_HOST        = os.getenv("DB_HOST")  # 例: xxxxxx.ap-northeast-1.rds.amazonaws.com
 DB_NAME        = os.getenv("DB_NAME", "fortune_telling")
-DB_SECRET_NAME = os.getenv("DB_SECRET_NAME", "fortune-app-credentials")
+DB_SECRET_NAME = os.getenv("DB_SECRET_NAME", "fortune-telling-app-credentials")
 TZ_JST         = timezone(timedelta(hours=9))
 
 # ===== Secrets Manager から DB 認証情報を取得（起動時キャッシュ）=====
@@ -121,11 +121,11 @@ def result():
             row = cur.fetchone()
     except Exception:
         # DB未準備時のフォールバック
-        row = {"number": "〇", "fortune_rank": "中吉", "message": "深呼吸してペースを整えよう。"}
+        row = {"number": "11", "fortune_rank": "中吉", "message": "深呼吸してペースを整えよう。"}
 
     # テーブルが空のときのフォールバック
     if not row:
-        row = {"number": "〇", "fortune_rank": "中吉", "message": "深呼吸してペースを整えよう。"}
+        row = {"number": "11", "fortune_rank": "中吉", "message": "深呼吸してペースを整えよう。"}
 
     return render_template_string(
         RESULT_HTML,
