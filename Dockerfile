@@ -1,16 +1,20 @@
-FROM python:3.11-slim
+# ランタイム
+FROM python:3.12-slim
 
-RUN apt-get update && apt-get install -y nginx curl
+# OSパッケージ（MySQL接続やtz、必要最小限）
+RUN apt-get update -y \
+ && apt-get install -y --no-install-recommends build-essential default-libmysqlclient-dev ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
 
+# 依存関係
 WORKDIR /app
-
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY app.py /app/app.py
-COPY nginx.conf /etc/nginx/sites-enabled/default
-# デフォルトのindex.htmlは削除
-RUN rm -f /usr/share/nginx/html/index.html
+# アプリ本体
+COPY app/app.py /app/app.py
+ENV PORT=8080
+EXPOSE 8080
 
-CMD service nginx start && gunicorn -b 127.0.0.1:5000 app:app
-
+# Gunicornで起動（マルチワーカー対応）
+CMD ["gunicorn", "-b", "0.0.0.0:8080", "--workers", "2", "app:app"]
