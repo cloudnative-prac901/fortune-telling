@@ -1,9 +1,11 @@
 version: 0.2
 env:
   variables:
-    ECR_REPO: "fortune-telling/app"           # ECR リポジトリ名
-    DEPLOY_DIR: "deploy/ecs"                # リポ直下の /deploy/ecs に変更
+    ECR_REPO: "fortune-telling/app"        # ECR リポジトリ名
+    DEPLOY_DIR: "deploy/ecs"               # リポ直下の /deploy/ecs に変更
+    LOG_GROUP: "/ecs/fortune-telling"      # ロググループ名
   git-credential-helper: no
+  
 phases:
   # pre_build（ECRログイン、タグ生成などを実施）
   pre_build:
@@ -12,6 +14,11 @@ phases:
       - ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
       - REGION="${AWS_DEFAULT_REGION}"
       - echo "[pre_build] ACCOUNT_ID=${ACCOUNT_ID} REGION=${REGION}"
+
+      # ロググループ作成
+      - aws logs create-log-group --log-group-name "$LOG_GROUP" --region "$REGION" || true
+      - aws logs put-retention-policy --log-group-name "$LOG_GROUP" --retention-in-days 7 --region "$REGION" || true
+
       # ECR login
       - aws ecr get-login-password --region "$REGION" | docker login --username AWS --password-stdin "${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com"
 
@@ -30,6 +37,7 @@ phases:
       # 配置ファイルの存在チェック
       - test -f "${DEPLOY_DIR}/appspec.yml" || { echo "not found:${DEPLOY_DIR}/appspec.yml"; exit 1; }
       - test -f "${DEPLOY_DIR}/taskdef.tmpl.json" || { echo "not found:${DEPLOY_DIR}/taskdef.tmpl.json"; exit 1; }
+  
   # build（docker buildなど）
   build:
     commands:
@@ -39,6 +47,7 @@ phases:
       - test -f "${DF}" || { echo "Dockerfile not found:${DF}"; exit 1; }
       - echo "[build] docker build ${DF} -> ${IMAGE_URI}"
       - docker build -f "${DF}" -t "${IMAGE_URI}" "${CTX}"
+      
   # post_build（ECRプッシュ、imageDetail.jsonの出力）
   post_build:
     commands:
