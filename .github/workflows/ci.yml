@@ -1,0 +1,26 @@
+name: CI (Kick CodePipeline)
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  kick-pipeline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/GitHubOIDCRole
+          role-session-name: GitHubActionsSession
+          aws-region: ap-northeast-2
+
+      - name: Start CodePipeline
+        run: aws codepipeline start-pipeline-execution --name CustomerInfoPipeline
+
