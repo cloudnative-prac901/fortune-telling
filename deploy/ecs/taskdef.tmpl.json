@@ -1,0 +1,37 @@
+{
+  "family": "fortune-telling-task",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "256",
+  "memory": "512",
+  "executionRoleArn": "${EXEC_ROLE_ARN}",
+  "taskRoleArn":      "${TASK_ROLE_ARN}",
+  "containerDefinitions": [
+    {
+      "name": "app",
+      "image": "<IMAGE1_NAME>",
+      "essential": true,
+      "portMappings": [{ "containerPort": 80, "protocol": "tcp" }],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/fortune-telling",
+          "awslogs-region": "${REGION}",
+          "awslogs-stream-prefix": "fortune-telling"
+        }
+      },
+      "environment": [
+        { "name": "DB_HOST", "value": "${DB_HOST}"}
+      ],
+      "healthCheck": {
+        "command": ["CMD-SHELL","curl -f http://localhost:80/ || exit 1"],
+        "interval": 30, "timeout": 5, "retries": 3, "startPeriod": 15
+      },
+      "secrets": [
+        { "name": "DB_USER", "valueFrom": "${DB_SECRET_ARN}:username::" },
+        { "name": "DB_PASS", "valueFrom": "${DB_SECRET_ARN}:password::" }
+      ]
+    }
+  ],
+  "runtimePlatform": { "operatingSystemFamily": "LINUX", "cpuArchitecture": "X86_64" }
+}
