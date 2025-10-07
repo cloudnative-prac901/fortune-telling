@@ -13,8 +13,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # アプリ本体
 COPY app/app.py /app/app.py
-ENV PORT=8080
-EXPOSE 8080
+ENV PORT=80
+EXPOSE 80
 
 # Gunicornで起動（マルチワーカー対応）
-CMD ["gunicorn", "-b", "0.0.0.0:8080", "--workers", "2", "app:app"]
+CMD ["gunicorn", "-b", "0.0.0.0:80", "--workers", "2", "app:app"]
