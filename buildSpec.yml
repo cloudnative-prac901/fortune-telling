@@ -1,0 +1,78 @@
+version: 0.2
+env:
+  variables:
+    ECR_REPO: "fortune-telling/app"           # ECR リポジトリ名
+    DEPLOY_DIR: "deploy/ecs"                # リポ直下の /deploy/ecs に変更
+  git-credential-helper: no
+phases:
+  # pre_build（ECRログイン、タグ生成などを実施）
+  pre_build:
+    commands:
+      - set -eu
+      - ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+      - REGION="${AWS_DEFAULT_REGION}"
+      - echo "[pre_build] ACCOUNT_ID=${ACCOUNT_ID} REGION=${REGION}"
+      # ECR login
+      - aws ecr get-login-password --region "$REGION" | docker login --username AWS --password-stdin "${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com"
+
+      # Pipelineから渡される変数でロール/SecretARN を解決
+      - EXEC_ROLE_ARN="${EXEC_ROLE_ARN:-}"
+      - TASK_ROLE_ARN="${TASK_ROLE_ARN:-}"
+      - DB_SECRET_ARN="${DB_SECRET_ARN:-}"
+      - DB_HOST="${DB_HOST:-}"
+
+      # イメージタグ生成（main 固定ポリシー）
+      - TS=$(date +%Y%m%d%H%M%S)
+      - IMAGE_TAG="main-${TS}-b${CODEBUILD_BUILD_NUMBER:-0}"
+      - test -n "${ECR_REPO}" || { echo "ECR_REPO is empty"; exit 1; }
+      - IMAGE_URI="${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/${ECR_REPO}:${IMAGE_TAG}"
+      - echo "[pre_build] IMAGE_URI=${IMAGE_URI}"
+      # 配置ファイルの存在チェック
+      - test -f "${DEPLOY_DIR}/appspec.yml" || { echo "not found:${DEPLOY_DIR}/appspec.yml"; exit 1; }
+      - test -f "${DEPLOY_DIR}/taskdef.tmpl.json" || { echo "not found:${DEPLOY_DIR}/taskdef.tmpl.json"; exit 1; }
+  # build（docker buildなど）
+  build:
+    commands:
+      - set -eu
+      - CTX="${BUILD_CONTEXT:-.}"
+      - DF="${DOCKERFILE_PATH:-${CTX}/Dockerfile}"
+      - test -f "${DF}" || { echo "Dockerfile not found:${DF}"; exit 1; }
+      - echo "[build] docker build ${DF} -> ${IMAGE_URI}"
+      - docker build -f "${DF}" -t "${IMAGE_URI}" "${CTX}"
+  # post_build（ECRプッシュ、imageDetail.jsonの出力）
+  post_build:
+    commands:
+      - set -eu
+      - echo "[post_build] push ${IMAGE_URI}"
+      - docker push "${IMAGE_URI}"
+      # CodeDeploy(ECS Blue/Green) 用の imageDetail.json（DEPLOY_DIR に出力）
+      - printf '{"ImageURI":"%s"}\n' "${IMAGE_URI}" > imageDetail.json
+      - echo "imageDetail.json:" && cat imageDetail.json
+
+      # jq/gettext インストール（yum/apt 両対応）
+      - |
+        if command -v yum >/dev/null 2>&1; then
+          sudo yum -y install jq gettext >/dev/null
+        else
+          sudo apt-get update -y >/dev/null
+          sudo apt-get install -y jq gettext-base >/dev/null
+        fi
+
+      # taskdef.tmpl.json → taskdef.json（envsubst でプレースホルダ埋め込み）
+      - export EXEC_ROLE_ARN TASK_ROLE_ARN REGION DB_SECRET_ARN DB_HOST
+      - envsubst < "${DEPLOY_DIR}/taskdef.tmpl.json" > "${DEPLOY_DIR}/taskdef.json"
+
+      # DB未導入の場合は secrets を削除して登録
+      - |
+        if [ -z "${DB_SECRET_ARN}" ] || [ "${DB_SECRET_ARN}" = "None" ]; then
+          echo "[post_build] DB_SECRET_ARN is empty => remove secrets from taskdef"
+          jq '(.containerDefinitions[0]) |= del(.secrets)' "${DEPLOY_DIR}/taskdef.json" > "${DEPLOY_DIR}/taskdef.tmp" && mv "${DEPLOY_DIR}/taskdef.tmp" "${DEPLOY_DIR}/taskdef.json"
+        fi
+      - echo "[done] artifacts in ${DEPLOY_DIR}"
+artifacts:
+  files:
+    - deploy/ecs/appspec.yml
+    - deploy/ecs/taskdef.json
+    - imageDetail.json
+  discard-paths: no
+  
