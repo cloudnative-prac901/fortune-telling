@@ -22,5 +22,5 @@ jobs:
           aws-region: ap-northeast-2
 
       - name: Start CodePipeline
-        run: aws codepipeline start-pipeline-execution --name CustomerInfoPipeline
+        run: aws codepipeline start-pipeline-execution --name FortuneTellingPipeline
 
